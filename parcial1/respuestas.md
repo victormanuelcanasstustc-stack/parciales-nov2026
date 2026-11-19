@@ -342,7 +342,6 @@ bisect found first bad commit
 Git probó automáticamente los commits 8, 11, 10 y 9: cuatro ejecuciones de la prueba. Identificó correctamente el commit 9 como el primero defectuoso. Finalmente, se ejecutó `git bisect reset` y se regresó a `main`, con el repositorio limpio.
 
 
-cat >> parcial1/respuestas.md <<'EOF'
 
 ## Pregunta 3. Depuración sistemática
 
@@ -418,7 +417,7 @@ Un ejemplo de automatización en Bash para repetir el procesamiento es:
 ```bash
 for i in $(seq 1 1000); do
     echo "Ejecución $i"
-    python main.py datos.csv --output "resultados/salida_$i.csv" || break
+    `python main.py` datos.csv --output "resultados/salida_$i.csv" || break
 done
 ```
 
@@ -429,7 +428,6 @@ Después de las ejecuciones compararía los hashes de las salidas y revisaría l
 **Limitación y siguiente investigación:** sin disponer del código fuente del procesador CSV ni de una ejecución que produzca el resultado incorrecto, no es posible afirmar cuál de las hipótesis es la causa real. Hasta aquí se establece un procedimiento verificable para aislar el problema. Para determinar la causa definitiva todavía habría que inspeccionar el código y contrastar los registros de una ejecución fallida con los de una ejecución correcta.
 
 
-cat >> parcial1/respuestas.md <<'EOF'
 
 ## Pregunta 4. Perfilamiento y optimización del rendimiento
 
@@ -581,4 +579,277 @@ El principio que se debe aplicar es la ley de Amdahl: la mejora global está lim
 La decisión correcta es optimizar primero las funciones que concentran el tiempo medido y volver a perfilar después de cada cambio. Solo consideraría paralelizar la lectura si nuevas mediciones demostraran que se ha convertido en un cuello de botella significativo.
 
 Alcance de la conclusión: los porcentajes y la estimación se calculan con los datos suministrados por el enunciado. No se dispone del código fuente ni de una ejecución optimizada para verificar el tiempo real posterior. Por eso, los 46.722 segundos son una estimación bajo los supuestos indicados, no una medición experimental.
-EOF
+
+
+
+## Pregunta 5. Empaquetado y reproducibilidad
+
+### 5.1. Problemas que pueden impedir ejecutar el proyecto en una máquina limpia
+
+El README únicamente indica instalar las dependencias y ejecutar `python main.py`. Esa información no garantiza que otra persona pueda reproducir el entorno ni ejecutar el programa. Identifico los siguientes problemas:
+
+**1. No se especifica la versión de Python.**
+
+Dos equipos pueden utilizar versiones diferentes del intérprete. Una versión antigua puede no soportar la sintaxis utilizada o puede ser incompatible con alguna dependencia.
+
+Ejemplo de error si Python no está instalado o no está disponible en el PATH de Windows:
+
+```text
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+```
+
+En Linux o macOS podría aparecer `python: command not found`.
+
+
+2. Las dependencias no tienen versiones fijadas.
+
+El archivo `requirements.txt` contiene únicamente los nombres pandas, requests y scikit-learn. Al instalarlo en fechas diferentes, pip puede resolver versiones diferentes. Esto puede ocasionar incompatibilidades o cambios de comportamiento.
+
+Un error posible por incompatibilidad entre versiones sería:
+ImportError: cannot import name '...' from '...'
+
+
+El mensaje concreto depende de las versiones y del código que importe los paquetes.
+
+3. No se documenta la creación de un entorno virtual.
+
+Instalar las dependencias directamente en el Python global puede generar conflictos con otros proyectos y con paquetes que ya estén instalados.
+
+Un ejemplo de conflicto que pip puede informar es:
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed.
+
+
+La solución es crear y activar un entorno virtual independiente antes de instalar los paquetes.
+
+4. No se documentan las variables de entorno necesarias.
+
+El proyecto contiene un archivo `.env`, pero el README no explica qué variables necesita el programa ni cómo configurarlas. Si el código requiere una variable que no existe, puede producirse un error como:
+KeyError: 'API_KEY'
+
+
+Este mensaje es un ejemplo si el programa consulta esa variable mediante `os.getenv("API_KEY")`; el nombre real depende del código.
+
+5. No se documenta la configuración de `config.json`.
+
+Aunque el archivo aparece en la estructura, no se explica qué parámetros contiene, cuáles son obligatorios ni qué valores debe utilizar una instalación nueva. Si el programa espera una clave que no está presente, puede aparecer:
+KeyError: 'nombre_de_la_clave'
+
+
+También podría fallar la lectura si el JSON está mal formado:
+json.decoder.JSONDecodeError
+
+
+6. No se especifica cómo se localiza el archivo de datos.
+
+El archivo `datos/muestra.csv` aparece en el árbol, pero no se explica si el programa utiliza rutas relativas al directorio del proyecto o al directorio actual de la terminal. Ejecutar el programa desde otra ubicación puede provocar:
+FileNotFoundError: [Errno 2] No such file or directory: 'datos/muestra.csv'
+
+
+Se deben construir las rutas a partir de la ubicación del archivo del programa o documentar claramente el directorio desde el que se ejecuta.
+
+7. No se documenta la estructura ni el contenido esperado del CSV.
+
+Que exista `datos/muestra.csv` no garantiza que tenga las columnas, el separador, la codificación y los tipos de datos que espera el programa. Una columna inexistente podría provocar:
+KeyError: 'nombre_columna'
+
+
+Se deben documentar las columnas obligatorias y proporcionar un archivo de muestra válido.
+
+8. No se documenta el procedimiento de instalación y ejecución en Windows y Unix.
+
+El README no explica cómo crear y activar el entorno virtual en cada sistema, ni cómo configurar las variables de entorno. Esto dificulta repetir los pasos correctamente y diagnosticar errores.
+
+Además, no se documentan las pruebas ni el resultado esperado, por lo que no existe una forma clara de confirmar que la instalación quedó funcional.
+
+Los mensajes anteriores son ejemplos de errores que pueden producirse bajo las condiciones descritas. No se afirma que todos hayan sido observados: para confirmar el error real de cada caso es necesario ejecutar el proyecto y revisar su código fuente.
+### 5.2. Archivo que no debe versionarse, riesgo y reemplazo
+El archivo que no debe incluirse en el repositorio es `.env`, porque normalmente contiene información privada, como claves API, contraseñas, tokens y credenciales de servicios externos.
+
+Si se publica en GitHub, una persona no autorizada podría utilizar esas credenciales. Eliminar el archivo en un commit posterior no garantiza que el secreto desaparezca del historial de Git.
+
+La solución es:
+1. Agregar `.env` a .gitignore.
+2. Crear un archivo `.env.example` con los nombres de las variables necesarias, pero sin valores secretos.
+3. Entregar las credenciales reales por un medio seguro y hacer que cada usuario cree su propio `.env`.
+4. Si una credencial real ya fue publicada, revocarla o rotarla; no basta con borrar el archivo.
+Ejemplo de `.gitignore`:
+
+```gitignore
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+```
+
+
+Ejemplo de `.env.example`:
+
+```text
+API_KEY=
+```
+
+
+API_KEY es un nombre ilustrativo. Debe sustituirse o complementarse con las variables que realmente utilice el código.
+### 5.3. Reescritura de `requirements.txt`
+Una versión con dependencias fijadas podría ser:
+
+```text
+pandas==2.2.3
+requests==2.32.3
+scikit-learn==1.5.2
+```
+
+
+Los cambios son:
+- Se fijan versiones exactas mediante ==, en lugar de permitir que pip instale cualquier versión disponible.
+- Se facilita que distintas instalaciones utilicen las mismas versiones directas.
+- Se mantienen las tres dependencias indicadas en el proyecto.
+Estas versiones son una propuesta de referencia compatible con un entorno de Python 3.11, no versiones verificadas contra el código fuente de este proyecto. Antes de declarar el archivo como reproducible, deben instalarse en un entorno limpio, comprobarse las importaciones y ejecutarse las funciones del programa. Si alguna dependencia requiere otra versión, se debe ajustar y volver a probar.
+
+Para una reproducibilidad más completa también se deben registrar la versión de Python y las dependencias transitivas del entorno validado.
+### 5.4. README.md propuesto
+El README debe explicar los requisitos, la instalación, la configuración, la ejecución, los datos y la comprobación del proyecto. Una propuesta completa es:
+
+```markdown
+# Analizador
+
+Aplicación Python para analizar los datos de un archivo CSV.
+
+## Requisitos
+
+- Python 3.11.x.
+- pip.
+- Git, para clonar el repositorio.
+
+## Estructura del proyecto
+
+    Analizador/
+    ├── main.py
+    ├── `config.json`
+    ├── `.env.example`
+    ├── .gitignore
+    ├── `requirements.txt`
+    ├── utils.py
+    └── datos/
+        └── muestra.csv
+
+El archivo `.env` debe crearse localmente y no debe subirse al
+repositorio.
+
+## Instalación
+
+Clonar el repositorio y entrar en su carpeta:
+
+    git clone URL_DEL_REPOSITORIO
+    cd Analizador
+
+Crear un entorno virtual:
+
+En Windows:
+
+    `python -m venv .venv`
+    .venv\Scripts\activate
+
+En Linux o macOS:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+Actualizar pip e instalar las dependencias:
+
+    python -m pip install --upgrade pip
+    `python -m pip install -r requirements.txt`
+
+## Configuración
+
+Crear el archivo `.env` a partir de la plantilla:
+
+En Windows:
+
+    copy `.env.example` `.env`
+
+En Linux o macOS:
+
+    cp `.env.example` `.env`
+
+Editar `.env` y establecer las variables requeridas con credenciales
+propias. No publicar este archivo.
+
+Revisar `config.json` y comprobar que sus valores correspondan a la
+configuración esperada por la aplicación.
+
+## Datos de entrada
+
+El archivo de muestra se encuentra en:
+
+    `datos/muestra.csv`
+
+Debe conservar las columnas, el separador y la codificación que espera
+el programa. No se deben introducir credenciales ni información privada
+en el conjunto de datos de ejemplo.
+
+## Ejecución
+
+Con el entorno virtual activado y desde la carpeta raíz del proyecto:
+
+    `python main.py`
+
+## Verificación
+
+Comprobar las dependencias:
+
+    `python -m pip check`
+
+Comprobar las versiones instaladas:
+
+    `python --version`
+    python -m pip freeze
+
+Ejecutar la aplicación:
+
+    `python main.py`
+
+La ejecución se considera correcta cuando el programa termina sin
+errores, procesa el archivo de entrada y produce el resultado esperado
+según la funcionalidad definida en el código.
+
+## Seguridad
+
+- No subir `.env` al repositorio.
+- Mantener `.env.example` sin credenciales reales.
+- No publicar contraseñas, tokens ni claves API.
+- Si una credencial se expone, revocarla o rotarla.
+
+## Reproducibilidad
+
+Se recomienda utilizar la versión de Python documentada y las
+dependencias fijadas en `requirements.txt`. Cualquier actualización
+debe probarse antes de publicarse.
+
+La dirección `URL_DEL_REPOSITORIO` debe reemplazarse por la URL real del repositorio del proyecto Analizador. Los nombres de las variables, los parámetros de configuración y el resultado esperado también deben ajustarse al código fuente real.
+```
+
+### 5.5. Procedimiento exacto para verificar en una máquina limpia
+No basta con ejecutar el proyecto en el equipo donde fue desarrollado, porque allí pueden existir paquetes, variables de entorno y configuraciones que no están documentadas.
+
+**El procedimiento de verificación sería:**
+1. Preparar una máquina virtual, contenedor o equipo limpio que no tenga instalado el proyecto ni sus dependencias.
+2. Instalar la versión de Python documentada y comprobarla con `python --version`.
+3. Clonar el repositorio desde GitHub y entrar en la carpeta del proyecto.
+4. Comprobar que `.env` no esté versionado y que `.env.example` sí esté disponible.
+5. Crear el entorno virtual con `python -m venv .venv`.
+6. Activar el entorno virtual.
+7. Instalar las dependencias exclusivamente desde `requirements.txt` mediante `python -m pip install -r requirements.txt`.
+8. Ejecutar `python -m pip check` para comprobar conflictos entre dependencias.
+9. Crear el archivo `.env` a partir de `.env.example` y configurar las variables necesarias.
+10. Revisar `config.json` y verificar que el archivo `datos/muestra.csv` exista y tenga el formato esperado.
+11. Ejecutar `python main.py` desde el directorio raíz.
+12. Comprobar que el programa finalice correctamente y que el resultado coincida con el esperado.
+13. Registrar los comandos, versiones, resultados y errores encontrados como evidencia.
+
+Para considerar superada la prueba, otra persona debe poder repetir estos pasos sin depender de paquetes instalados previamente, rutas particulares del equipo original ni credenciales publicadas.
+
+Alcance de la verificación: este procedimiento describe cómo comprobar la reproducibilidad. No se afirma que se haya ejecutado en una máquina limpia ni que el programa funcione correctamente, porque para demostrarlo se necesita disponer del código fuente completo y realizar la prueba. Los errores concretos y las versiones definitivas deben confirmarse durante esa ejecución.
