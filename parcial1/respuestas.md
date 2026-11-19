@@ -283,3 +283,19 @@ La búsqueda binaria reduce aproximadamente a la mitad los commits candidatos en
 \]
 
 Por tanto, se requieren como máximo 4 ejecuciones de la suite para localizar el cambio que introdujo el error, suponiendo que los extremos del intervalo ya están clasificados como bueno y malo.
+
+### Comprobación práctica de git bisect
+
+Se realizó una prueba en un repositorio independiente con 15 commits. El primer commit contenía una prueba correcta y el commit 9 introdujo el cambio defectuoso.
+
+Se ejecutó `git bisect run ./prueba.sh`, indicando el commit inicial como bueno y el último como malo.
+
+**Resultado obtenido:**
+
+```text
+bc9886e1a314992fdaa6701ec88c67a71341a0f5 is the first bad commit
+Commit 9
+bisect found first bad commit
+
+
+Git ejecutó automáticamente la prueba en cuatro commits intermedios y encontró correctamente el commit 9. Después se ejecutó git bisect reset para regresar a la rama main.
