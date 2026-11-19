@@ -340,3 +340,90 @@ bisect found first bad commit
 ```
 
 Git probó automáticamente los commits 8, 11, 10 y 9: cuatro ejecuciones de la prueba. Identificó correctamente el commit 9 como el primero defectuoso. Finalmente, se ejecutó `git bisect reset` y se regresó a `main`, con el repositorio limpio.
+
+
+cat >> parcial1/respuestas.md <<'EOF'
+
+## Pregunta 3. Depuración sistemática
+
+El problema se clasifica como un fallo intermitente o no determinista: con los mismos datos de entrada, el programa produce ocasionalmente un resultado incorrecto sin generar una excepción. No asumiría que el CSV está dañado; investigaría también el orden de ejecución, el estado compartido, la concurrencia y las condiciones de escritura.
+
+### 3.1. Bitácora de hipótesis
+
+| Paso | Hipótesis | Experimento concreto | Acción según el resultado |
+|---|---|---|---|
+| 1 | Existe una condición de carrera: varios hilos o procesos modifican simultáneamente una estructura compartida. | Ejecutar 100 veces el mismo archivo primero con un solo trabajador y después con la configuración concurrente. Comparar los resultados mediante SHA-256 y también por contenido: número de filas, columnas, identificadores y valores agregados. | Si el modo secuencial es estable y el concurrente falla, revisar las variables compartidas, los bloqueos y la sincronización. Si ambos fallan, continuar con las demás hipótesis. |
+| 2 | El resultado depende del orden de procesamiento de las filas o de un ordenamiento no determinista. | Ejecutar el procesamiento con el mismo CSV en su orden original y en diferentes permutaciones controladas. Revisar las operaciones de agrupación, ordenamiento y selección de registros. | Si cambia el resultado, establecer un orden explícito y estable, incluyendo una segunda clave de desempate, como el identificador del registro. |
+| 3 | La lectura por bloques divide registros o maneja incorrectamente valores entrecomillados, delimitadores o saltos de línea. | Procesar el mismo archivo completo y después con diferentes tamaños de bloque. Comparar el número de filas, las columnas, los valores nulos y los registros de cada resultado. | Si las diferencias aparecen al procesar por bloques, corregir los límites de lectura y la configuración del analizador CSV. |
+| 4 | Existen registros duplicados, identificadores repetidos o valores nulos que producen resultados incorrectos durante la agregación. | Calcular el total de filas, contar identificadores duplicados, detectar valores nulos y comparar los resultados de cada grupo con una agregación independiente. | Si se encuentran inconsistencias, definir reglas explícitas para duplicados y valores nulos, y validar las cantidades antes y después de cada transformación. |
+| 5 | Varios procesos escriben simultáneamente en el mismo archivo de salida o una escritura reemplaza el resultado de otra. | Ejecutar la transformación sin concurrencia y guardar cada resultado en un archivo temporal diferente. Comparar los archivos y revisar si existe más de un escritor para el mismo destino. | Si el problema desaparece, asignar un único responsable de escritura o utilizar archivos temporales independientes y una sustitución atómica al finalizar. |
+| 6 | El comportamiento depende de una configuración o de un estado externo que no se está registrando. | Repetir la ejecución conservando las versiones de Python y las dependencias, la configuración, la semilla aleatoria, la codificación y las variables de entorno. Comparar los metadatos entre ejecuciones. | Si se identifica una diferencia, fijar la configuración necesaria y registrar sus valores para poder reproducir el entorno. |
+
+En todos los experimentos conservaría una copia del archivo original, calcularía su hash SHA-256 y registraría el identificador de cada ejecución. Así se evita confundir un cambio de entrada con un fallo del procesamiento.
+
+### 3.2. Por qué la depuración mediante impresiones es inadecuada
+
+Hay dos razones técnicas principales:
+
+1. **Puede modificar el comportamiento temporal del programa.** Agregar impresiones introduce operaciones de entrada y salida que consumen tiempo y pueden cambiar la planificación de los hilos. Si existe una condición de carrera, el cambio de tiempos puede hacer que el error desaparezca o que aparezca con otra frecuencia. Esto dificulta investigar un fallo que ocurre aproximadamente una de cada veinte ejecuciones.
+
+2. **No proporciona trazabilidad estructurada de las ejecuciones.** Las impresiones aisladas no garantizan que se pueda relacionar cada registro con un archivo, una ejecución, un trabajador o una etapa concreta. En un procesamiento concurrente, los mensajes pueden intercalarse y dificultar la reconstrucción del orden real de los acontecimientos.
+
+Por estas razones utilizaría registros estructurados, con marcas de tiempo, identificadores de ejecución y datos de contexto, en lugar de depender de impresiones dispersas.
+
+### 3.3. Configuración de registro estructurado
+
+Dejaría instalado un registro en formato JSON, con una marca de tiempo en UTC, un nivel, el nombre del módulo, el mensaje y campos de contexto. Cada ejecución tendría un `run_id` único.
+
+| Nivel | Información que registraría |
+|---|---|
+| DEBUG | Identificador de fila, número de bloque, trabajador que procesa el registro, valores de control necesarios para seguir las transformaciones y orden de procesamiento. Se puede activar detalladamente durante la investigación. |
+| INFO | Inicio y final de cada ejecución, nombre del archivo, hash SHA-256, configuración, versiones de Python y dependencias, cantidad de filas leídas, procesadas y escritas, y duración de cada etapa. |
+| WARNING | Filas duplicadas, valores nulos, registros descartados, conversiones inesperadas, reintentos y diferencias respecto a las cantidades esperadas. |
+| ERROR | Inconsistencias detectadas en las validaciones, cantidades incorrectas, resultados incompletos y fallos de lectura o escritura. Registraría también el contexto de la etapa y el identificador de ejecución, aunque no exista una excepción. |
+| CRITICAL | Una condición que impida garantizar la integridad del resultado, como una salida incompleta que no pueda recuperarse. Registraría el motivo y la acción de interrupción. |
+
+Además, definiría validaciones explícitas antes de finalizar:
+
+- La cantidad de filas leídas debe coincidir con la cantidad procesada más las filas descartadas justificadamente.
+- Las columnas obligatorias deben existir.
+- Los identificadores que deban ser únicos no deben presentar duplicados.
+- La cantidad de registros escritos debe coincidir con la cantidad esperada.
+- El archivo final debe estar completo y poder leerse nuevamente.
+
+Si una validación falla, registraría un evento `ERROR` con los valores esperados y obtenidos, el `run_id` y la etapa correspondiente. No registraría indiscriminadamente datos personales o información sensible del CSV.
+
+### 3.4. Limitaciones de los puntos de interrupción
+
+Un depurador con puntos de interrupción tampoco es la primera herramienta adecuada porque detiene la ejecución en momentos específicos. Si el fallo depende de una condición de carrera, la pausa puede alterar la planificación de los hilos y modificar el comportamiento que se intenta investigar.
+
+Además, detener una ejecución no garantiza capturar el estado exacto que produjo el resultado incorrecto. Como el problema aparece aproximadamente en una de cada veinte ejecuciones, inspeccionar una ejecución que funciona no permite concluir que el defecto esté resuelto.
+
+Un punto de interrupción sí sería adecuado cuando el problema sea reproducible de forma determinista, exista una ubicación concreta sospechosa y se necesite inspeccionar paso a paso los valores de las variables, las condiciones y la pila de llamadas.
+
+### 3.5. Estrategia para forzar la reproducibilidad
+
+Implementaría un procedimiento de pruebas repetidas y controladas:
+
+1. Guardar una copia inmutable del CSV original y calcular su hash SHA-256.
+2. Fijar la versión de Python, las dependencias, la configuración, la codificación y los parámetros del procesamiento.
+3. Registrar la semilla aleatoria cuando el programa utilice operaciones aleatorias.
+4. Ejecutar repetidamente el procesamiento con exactamente los mismos datos, primero de forma secuencial y después con el nivel de concurrencia habitual.
+5. Guardar cada resultado en un archivo independiente y calcular su hash SHA-256 para detectar diferencias.
+6. Registrar el `run_id`, el número de filas, la duración, los trabajadores utilizados y las validaciones de cada ejecución.
+7. Cuando aparezca una diferencia, conservar el CSV, la configuración, los registros y los resultados de esa ejecución para analizarla sin depender de que el fallo vuelva a ocurrir.
+
+Un ejemplo de automatización en Bash para repetir el procesamiento es:
+
+```bash
+for i in $(seq 1 1000); do
+    echo "Ejecución $i"
+    python main.py datos.csv --output "resultados/salida_$i.csv" || break
+done
+```
+
+Este comando es una plantilla: los argumentos `datos.csv` y `--output` deben adaptarse a la interfaz real del script. La carpeta `resultados/` debe existir previamente.
+
+Después de las ejecuciones compararía los hashes de las salidas y revisaría los registros de las ejecuciones diferentes. Si el fallo se relaciona con concurrencia, también repetiría la prueba variando el número de trabajadores y el tamaño de los bloques para identificar qué condición lo desencadena.
+
+**Limitación y siguiente investigación:** sin disponer del código fuente del procesador CSV ni de una ejecución que produzca el resultado incorrecto, no es posible afirmar cuál de las hipótesis es la causa real. Hasta aquí se establece un procedimiento verificable para aislar el problema. Para determinar la causa definitiva todavía habría que inspeccionar el código y contrastar los registros de una ejecución fallida con los de una ejecución correcta.
