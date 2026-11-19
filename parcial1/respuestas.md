@@ -212,3 +212,74 @@ find parcial1/archivos_prueba -type f -printf '%s\t%p\0' | sort -z -t $'\t' -k1,
 Mediante estos ejercicios se utilizaron herramientas de terminal y Python para automatizar tareas de administración y análisis de archivos. Se identificaron los archivos más grandes, se contaron las extensiones, se localizaron tareas pendientes y se analizaron los mensajes de error de un registro.
 
 Estos procedimientos permiten ahorrar tiempo, organizar mejor la información y detectar problemas de manera más eficiente en un entorno de desarrollo.
+
+
+## Pregunta 2. Git: modelo de datos y recuperación
+
+### 2.1. Grafo de commits resultante
+
+La secuencia crea los siguientes commits y relaciones:
+
+- A: commit inicial vacío.
+- B: segundo commit, hijo de A.
+- C: commit creado en la rama `rama`, hijo de B.
+- D: siguiente commit de `rama`, hijo de C.
+- E: commit creado en `main`, hijo de B.
+- M: commit de fusión que tiene dos padres: E y D.
+
+Grafo antes del reset:
+
+```text
+      C---D
+     /     \
+A---B       M
+     \     /
+      E---
+
+
+Después de ejecutar git reset --hard HEAD~1:
+- main apunta a E.
+- HEAD apunta a E, porque está ubicada en la rama main.
+- C, D y M ya no son alcanzables desde ninguna rama. Sin embargo, siguen existiendo temporalmente en la base de objetos de Git.
+2.2. Definición de rama
+Una rama en Git es una referencia móvil que apunta a un commit.
+2.3. Recuperación de C y D
+Primero se consulta el registro de movimientos de HEAD:
+git reflog
+
+
+Después de identificar la entrada correspondiente al commit M, se crea una rama para recuperarlo:
+git branch rescate 'HEAD@{1}'
+
+
+Se reemplaza <HASH_DE_M> por el hash real de M que aparece en el reflog.
+
+C y D siguen existiendo porque git reset --hard mueve la referencia de la rama, pero no elimina inmediatamente los objetos de commits. El reflog conserva temporalmente información de las posiciones anteriores de HEAD. Al recuperar M, también se recuperan las referencias alcanzables a sus padres D y C.
+2.4. Restaurar el estado anterior al reset
+git reset --hard ORIG_HEAD
+
+
+Este comando restaura la rama al commit que estaba registrado en ORIG_HEAD antes del reset. En la secuencia planteada, ese commit es M.
+2.5. Encontrar automáticamente el commit que introdujo el error
+Suponiendo que el commit actual falla las pruebas y que se conoce un commit anterior que las supera, se utiliza:
+git bisect start
+git bisect bad HEAD
+git bisect good <HASH_DEL_COMMIT_BUENO>
+git bisect run python -m pytest
+git bisect reset
+
+
+Se reemplaza <HASH_DEL_COMMIT_BUENO> por el hash del último commit conocido que pasa las pruebas. El comando git bisect run ejecuta automáticamente la suite en los commits seleccionados. La suite debe devolver código 0 cuando pasa y un código distinto de 0 cuando falla.
+
+Cálculo del peor caso:
+
+La búsqueda binaria reduce aproximadamente a la mitad los commits candidatos en cada ejecución.
+\[
+\lceil \log_2(15) \rceil
+=
+\lceil 3.9069 \rceil
+=
+4
+\]
+
+Por tanto, se requieren como máximo 4 ejecuciones de la suite para localizar el cambio que introdujo el error, suponiendo que los extremos del intervalo ya están clasificados como bueno y malo.
