@@ -198,6 +198,15 @@ head -n 5
 
 Aunque se solicitaron los cinco mensajes más frecuentes, solamente existen tres mensajes de error diferentes en el archivo de prueba. Por eso el comando devuelve tres resultados y no cinco.
 
+1.5. Manejo de nombres con espacios y saltos de línea
+
+Si se utilizan espacios como separadores, un nombre de archivo que contenga espacios puede interpretarse incorrectamente como varios campos. Si se utilizan saltos de línea como separadores, un nombre que contenga un salto de línea puede dividirse en registros diferentes.
+
+La solución consiste en utilizar el carácter NUL (\0) como delimitador, porque no puede formar parte de un nombre de archivo. Para ello se utilizan find -printf, sort -z, head -z y read -d ''.
+
+Comando corregido de una sola línea:
+find parcial1/archivos_prueba -type f -printf '%s\t%p\0' | sort -z -t $'\t' -k1,1nr | head -z -n 10 | while IFS= read -r -d '' registro; do tamano="${registro%%$'\t'*}"; archivo="${registro#*$'\t'}"; printf "%8s  %q\n" "$(numfmt --to=iec --suffix=B "$tamano")" "$archivo"; done
+
 ### Conclusión de la pregunta 1
 
 Mediante estos ejercicios se utilizaron herramientas de terminal y Python para automatizar tareas de administración y análisis de archivos. Se identificaron los archivos más grandes, se contaron las extensiones, se localizaron tareas pendientes y se analizaron los mensajes de error de un registro.
