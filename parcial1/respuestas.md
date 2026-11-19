@@ -427,3 +427,158 @@ Este comando es una plantilla: los argumentos `datos.csv` y `--output` deben ada
 Después de las ejecuciones compararía los hashes de las salidas y revisaría los registros de las ejecuciones diferentes. Si el fallo se relaciona con concurrencia, también repetiría la prueba variando el número de trabajadores y el tamaño de los bloques para identificar qué condición lo desencadena.
 
 **Limitación y siguiente investigación:** sin disponer del código fuente del procesador CSV ni de una ejecución que produzca el resultado incorrecto, no es posible afirmar cuál de las hipótesis es la causa real. Hasta aquí se establece un procedimiento verificable para aislar el problema. Para determinar la causa definitiva todavía habría que inspeccionar el código y contrastar los registros de una ejecución fallida con los de una ejecución correcta.
+
+
+cat >> parcial1/respuestas.md <<'EOF'
+
+## Pregunta 4. Perfilamiento y optimización del rendimiento
+
+### 4.1. Identificación de los dos cuellos de botella
+
+El tiempo total informado por el perfilador es de 84.112 segundos. Para identificar los cuellos de botella, comparo el tiempo propio (`tottime`) de las funciones que consumen más tiempo y calculo su porcentaje respecto al tiempo total.
+
+**Primer cuello de botella: `normalizar_texto`.**
+
+Esta función se ejecuta 240.000 veces y consume 41.900 segundos de tiempo propio.
+
+Operación:
+
+\[
+\frac{41.900}{84.112}\times 100 \approx 49.81\%
+\]
+
+Por tanto, la normalización de texto representa aproximadamente el 49.81 % del tiempo total.
+
+**Segundo cuello de botella: `comparar_lineal`.**
+
+Esta función consume 37.390 segundos de tiempo propio y se ejecuta dentro de las búsquedas en el catálogo.
+
+Operación:
+
+\[
+\frac{37.390}{84.112}\times 100 \approx 44.45\%
+\]
+
+Por tanto, la comparación lineal representa aproximadamente el 44.45 % del tiempo total.
+
+Las dos funciones concentran aproximadamente el 94.26 % del tiempo medido:
+
+\[
+49.81\%+44.45\%=94.26\%
+\]
+
+La optimización debe priorizar estas funciones, especialmente la comparación lineal porque permite cambiar el mecanismo de búsqueda y reducir su costo asintótico.
+
+### 4.2. Diferencia entre tottime y cumtime
+
+`tottime` es el tiempo empleado directamente dentro de una función, sin incluir el tiempo consumido por las funciones que esta llama.
+
+`cumtime` es el tiempo acumulado de una función, incluyendo el tiempo de sus llamadas internas.
+
+En la tabla, `buscar_en_catalogo` presenta:
+
+- `tottime`: 1.210 segundos.
+- `cumtime`: 38.600 segundos.
+
+Esto significa que la función utiliza directamente 1.210 segundos, pero el tiempo total asociado a su ejecución asciende a 38.600 segundos porque también ejecuta otras funciones.
+
+Una de ellas es `comparar_lineal`, que consume 37.390 segundos:
+
+\[
+1.210+37.390=38.600
+\]
+
+La operación coincide exactamente con el `cumtime` de `buscar_en_catalogo`.
+
+Por eso su `tottime` es bajo y su `cumtime` es alto: la mayor parte del tiempo no se consume en el código propio de búsqueda, sino en la función interna que compara linealmente los elementos.
+
+No deben sumarse los 38.600 segundos de `buscar_en_catalogo` y los 37.390 segundos de `comparar_lineal` como si fueran costos independientes, porque se estaría contando dos veces el tiempo de la comparación.
+
+### 4.3. Optimización de comparar_lineal
+
+Reemplazaría la búsqueda lineal por una estructura de datos basada en tablas hash de Python.
+
+Si el programa necesita comprobar si un elemento existe en el catálogo, utilizaría un `set`. Si necesita recuperar información asociada a una clave, utilizaría un diccionario (`dict`).
+
+Por ejemplo, para búsquedas por identificador:
+
+```python
+# Construcción del índice una sola vez.
+catalogo_por_id = {
+    elemento["id"]: elemento
+    for elemento in catalogo
+}
+
+# Búsqueda por identificador.
+resultado = catalogo_por_id.get(id_buscado)
+```
+
+Este ejemplo supone que `id` es una clave única y que la búsqueda original se realiza por ese identificador. Si existen identificadores repetidos, habría que conservar la regla original de selección, por ejemplo, almacenando una lista de elementos por identificador. Si la comparación original utiliza otra clave, el índice debe construirse con esa misma clave.
+
+**Complejidad antes de la optimización:**
+
+Si existen N registros que deben consultarse y M elementos en el catálogo, una búsqueda lineal puede recorrer hasta M elementos por cada consulta.
+\[
+T(N,M)=O(N\times M)
+\]
+
+En el peor caso, cada consulta revisa todo el catálogo.
+
+**Complejidad después de la optimización:**
+
+La construcción del diccionario requiere recorrer el catálogo una vez: \(O(M)\).
+
+Después, las consultas tienen un costo promedio de \(O(1)\) por búsqueda mediante una tabla hash.
+
+Por tanto:
+\[
+T(N,M)=O(M+N)
+\]
+
+Esta complejidad es promedio; en casos extremos de colisiones, las operaciones de una tabla hash pueden ser más costosas.
+
+La optimización también requiere memoria adicional para almacenar el índice. Además, hay que mantener las mismas reglas de comparación, normalización y tratamiento de identificadores para no cambiar el resultado funcional del programa.
+
+**Estimación del nuevo tiempo total:**
+
+Como primera estimación, supongo que la optimización elimina los 37.390 segundos consumidos por comparar_lineal y que el costo de construir el índice es pequeño frente al tiempo medido.
+\[
+T_{\text{nuevo}}=84.112-37.390
+\]
+
+\[
+\boxed{T_{\text{nuevo}}\approx46.722\text{ segundos}}
+\]
+
+La reducción estimada es de 37.390 segundos, equivalente aproximadamente al 44.45 % del tiempo original.
+
+Esta cifra es una estimación teórica basada en el perfil suministrado, no un resultado de una ejecución posterior. El tiempo real debe medirse después de implementar la optimización, incluyendo la construcción del índice y verificando que los resultados sean correctos.
+### 4.4. Nuevo cuello de botella después de optimizar
+Al eliminar el costo de `comparar_lineal`, la función que pasa a representar la mayor proporción del tiempo es `normalizar_texto`, que conserva sus 41.900 segundos de tiempo propio.
+
+Utilizando el nuevo tiempo total estimado:
+\[
+\frac{41.900}{46.722}\times100\approx89.68\%
+\]
+
+Por tanto, `normalizar_texto` representaría aproximadamente el 89.68 % del nuevo tiempo total.
+
+Esto demuestra que optimizar una función puede cambiar completamente la distribución del tiempo de ejecución. Después de mejorar la búsqueda, la siguiente prioridad sería investigar la normalización de texto: operaciones repetidas, expresiones regulares, conversiones innecesarias y trabajo que pueda reutilizarse mediante almacenamiento en caché cuando sea correcto hacerlo.
+### 4.5. Por qué no paralelizar `leer_archivo`
+No paralelizaría `leer_archivo` como primera medida porque los datos del perfilador muestran que consume solamente 2.100 segundos de los 84.112 segundos totales.
+
+Su porcentaje es:
+\[
+\frac{2.100}{84.112}\times100\approx2.50\%
+\]
+
+En cambio, normalizar_texto consume aproximadamente el 49.81 % y comparar_lineal el 44.45 %. Por tanto, la lectura del archivo no es el principal problema de rendimiento identificado.
+
+Incluso en el supuesto ideal de eliminar completamente el tiempo de lectura, la mejora máxima sería de 2.100 segundos, aproximadamente el 2.50 % del tiempo original. En la práctica, paralelizar puede introducir costos adicionales de coordinación, transferencia de datos, sincronización y administración de trabajadores.
+
+El principio que se debe aplicar es la ley de Amdahl: la mejora global está limitada por la proporción del programa que realmente se optimiza. También debe aplicarse el principio de perfilar antes de optimizar: las decisiones deben basarse en mediciones y no en suposiciones generales sobre qué parte del programa es lenta.
+
+La decisión correcta es optimizar primero las funciones que concentran el tiempo medido y volver a perfilar después de cada cambio. Solo consideraría paralelizar la lectura si nuevas mediciones demostraran que se ha convertido en un cuello de botella significativo.
+
+Alcance de la conclusión: los porcentajes y la estimación se calculan con los datos suministrados por el enunciado. No se dispone del código fuente ni de una ejecución optimizada para verificar el tiempo real posterior. Por eso, los 46.722 segundos son una estimación bajo los supuestos indicados, no una medición experimental.
+EOF
