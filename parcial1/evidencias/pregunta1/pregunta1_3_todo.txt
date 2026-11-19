@@ -1,0 +1,1 @@
+parcial1/archivos_prueba/tarea_pendiente.py:1:# TODO: completar la validacion de entrada

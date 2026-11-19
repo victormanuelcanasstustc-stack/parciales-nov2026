@@ -1,0 +1,10 @@
+    1800 bytes  parcial1/archivos_prueba/presentacion.pptx
+    1500 bytes  parcial1/archivos_prueba/respaldo.zip
+    1100 bytes  parcial1/archivos_prueba/registro.dat
+     900 bytes  parcial1/archivos_prueba/imagen prueba.bin
+     700 bytes  parcial1/archivos_prueba/documento largo.txt
+     600 bytes  parcial1/archivos_prueba/copia.bin
+     487 bytes  parcial1/archivos_prueba/registro.log
+     450 bytes  parcial1/archivos_prueba/datos.csv
+     300 bytes  parcial1/archivos_prueba/programa.py
+     250 bytes  parcial1/archivos_prueba/tabla.csv

@@ -1,0 +1,3 @@
+4	No se pudo conectar a la base de datos
+3	Archivo no encontrado
+1	Tiempo de espera agotado

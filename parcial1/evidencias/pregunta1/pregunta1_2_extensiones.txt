@@ -1,0 +1,14 @@
+Conteo de archivos por extension en: parcial1\archivos_prueba
+---------------------------------------------
+(sin extension)          1
+.bin                     2
+.csv                     2
+.dat                     1
+.log                     1
+.md                      1
+.pptx                    1
+.py                      3
+.txt                     3
+.zip                     1
+---------------------------------------------
+Total de archivos: 16
