@@ -214,20 +214,22 @@ Mediante estos ejercicios se utilizaron herramientas de terminal y Python para a
 Estos procedimientos permiten ahorrar tiempo, organizar mejor la información y detectar problemas de manera más eficiente en un entorno de desarrollo.
 
 
+correctamente el commit 9. Después se ejecutó git bisect reset para regresar a la rama main.
+
 ## Pregunta 2. Git: modelo de datos y recuperación
 
 ### 2.1. Grafo de commits resultante
 
-La secuencia crea los siguientes commits y relaciones:
+La secuencia produce seis commits:
 
 - A: commit inicial vacío.
-- B: segundo commit, hijo de A.
+- B: commit hijo de A.
 - C: commit creado en la rama `rama`, hijo de B.
-- D: siguiente commit de `rama`, hijo de C.
-- E: commit creado en `main`, hijo de B.
-- M: commit de fusión que tiene dos padres: E y D.
+- D: commit hijo de C.
+- E: commit creado en `main`, también hijo de B.
+- M: commit de fusión con dos padres: E y D.
 
-Grafo antes del reset:
+**Grafo después de la fusión y antes del reset:**
 
 ```text
       C---D
@@ -235,67 +237,106 @@ Grafo antes del reset:
 A---B       M
      \     /
       E---
+```
 
+Después de ejecutar `git branch -D rama` y `git reset --hard HEAD~1`:
 
-Después de ejecutar git reset --hard HEAD~1:
-- main apunta a E.
-- HEAD apunta a E, porque está ubicada en la rama main.
-- C, D y M ya no son alcanzables desde ninguna rama. Sin embargo, siguen existiendo temporalmente en la base de objetos de Git.
-2.2. Definición de rama
+- `main` apunta a E.
+- `HEAD` apunta a `main` (es una referencia simbólica), por lo que su commit actual también es E.
+- C, D y M dejan de ser alcanzables desde las ramas existentes.
+- A, B y E siguen siendo alcanzables desde `main`.
+
+**Grafo después del reset:**
+
+```text
+   A---B---C---D
+     \       \
+      E-------M
+      ^
+   main, HEAD
+```
+
+Los commits C, D y M no se eliminan inmediatamente: sus objetos pueden seguir almacenados en Git y M puede localizarse mediante el reflog.
+
+### 2.2. Definición de rama
+
 Una rama en Git es una referencia móvil que apunta a un commit.
-2.3. Recuperación de C y D
+
+### 2.3. Recuperación de C y D
+
 Primero se consulta el registro de movimientos de HEAD:
+
+```bash
 git reflog
+```
 
+Se identifica la entrada que corresponde al commit M y se copia su hash completo. Después se crea una rama de recuperación:
 
-Después de identificar la entrada correspondiente al commit M, se crea una rama para recuperarlo:
-git branch rescate 'HEAD@{1}'
+```bash
+ git branch rescate HASH_COMPLETO_DE_M
+```
 
+`HASH_COMPLETO_DE_M` debe reemplazarse por el hash real identificado en el reflog.
 
-Se reemplaza <HASH_DE_M> por el hash real de M que aparece en el reflog.
+C y D siguen existiendo porque `git reset --hard` mueve la referencia de la rama y actualiza el estado de trabajo, pero no elimina inmediatamente los objetos de commits. El reflog conserva temporalmente los movimientos anteriores de HEAD. Al recuperar M, también vuelven a ser alcanzables sus padres D y C.
 
-C y D siguen existiendo porque git reset --hard mueve la referencia de la rama, pero no elimina inmediatamente los objetos de commits. El reflog conserva temporalmente información de las posiciones anteriores de HEAD. Al recuperar M, también se recuperan las referencias alcanzables a sus padres D y C.
-2.4. Restaurar el estado anterior al reset
+### 2.4. Restaurar el estado anterior al reset
+
+El comando es:
+
+```bash
 git reset --hard ORIG_HEAD
+```
 
+En esta secuencia, `ORIG_HEAD` conserva la posición anterior al reset, que corresponde a M. El comando mueve nuevamente `main` a M y actualiza el área de preparación y el directorio de trabajo.
 
-Este comando restaura la rama al commit que estaba registrado en ORIG_HEAD antes del reset. En la secuencia planteada, ese commit es M.
-2.5. Encontrar automáticamente el commit que introdujo el error
-Suponiendo que el commit actual falla las pruebas y que se conoce un commit anterior que las supera, se utiliza:
+### 2.5. Encontrar automáticamente el commit que introdujo el error
+
+Se supone que se conoce un commit bueno y que el commit actual es malo. La secuencia es:
+
+```bash
 git bisect start
 git bisect bad HEAD
-git bisect good <HASH_DEL_COMMIT_BUENO>
-git bisect run python -m pytest
+git bisect good HASH_DEL_COMMIT_BUENO
+git bisect run COMANDO_DE_LA_SUITE
 git bisect reset
+```
 
+Se reemplazan los marcadores por el hash del último commit conocido como bueno y por el comando real que ejecuta las pruebas, por ejemplo, `python -m pytest`.
 
-Se reemplaza <HASH_DEL_COMMIT_BUENO> por el hash del último commit conocido que pasa las pruebas. El comando git bisect run ejecuta automáticamente la suite en los commits seleccionados. La suite debe devolver código 0 cuando pasa y un código distinto de 0 cuando falla.
+La suite debe devolver código de salida 0 cuando las pruebas pasan y un código distinto de 0 cuando fallan. `git bisect run` ejecuta automáticamente la suite en los commits seleccionados y utiliza esos códigos para clasificar cada versión.
 
-Cálculo del peor caso:
+**Cálculo del peor caso:**
 
-La búsqueda binaria reduce aproximadamente a la mitad los commits candidatos en cada ejecución.
+Con 15 commits y los extremos ya clasificados (uno bueno y otro malo), existen como máximo 14 posiciones posibles para el primer commit defectuoso. La búsqueda binaria reduce aproximadamente a la mitad las posibilidades en cada ejecución.
+
 \[
-\lceil \log_2(15) \rceil
+\lceil \log_2(14) \rceil
 =
-\lceil 3.9069 \rceil
+\lceil 3.8074 \rceil
 =
 4
 \]
 
-Por tanto, se requieren como máximo 4 ejecuciones de la suite para localizar el cambio que introdujo el error, suponiendo que los extremos del intervalo ya están clasificados como bueno y malo.
+Por tanto, se requieren como máximo 4 ejecuciones adicionales de la suite para localizar el primer commit defectuoso, bajo el supuesto de que el comportamiento de las pruebas permite distinguir correctamente los commits buenos de los malos.
 
-### Comprobación práctica de git bisect
+**Comprobación práctica:**
 
-Se realizó una prueba en un repositorio independiente con 15 commits. El primer commit contenía una prueba correcta y el commit 9 introdujo el cambio defectuoso.
+Se creó un repositorio independiente con 15 commits. El primer commit contenía una prueba correcta y el commit 9 introdujo el cambio defectuoso. Se indicó el primer commit como bueno y el último como malo, y se ejecutó:
 
-Se ejecutó `git bisect run ./prueba.sh`, indicando el commit inicial como bueno y el último como malo.
+```bash
+git bisect start
+git bisect bad HEAD
+git bisect good fe4e066
+git bisect run ./prueba.sh
+```
 
-**Resultado obtenido:**
+El resultado real fue:
 
 ```text
 bc9886e1a314992fdaa6701ec88c67a71341a0f5 is the first bad commit
 Commit 9
 bisect found first bad commit
+```
 
-
-Git ejecutó automáticamente la prueba en cuatro commits intermedios y encontró correctamente el commit 9. Después se ejecutó git bisect reset para regresar a la rama main.
+Git probó automáticamente los commits 8, 11, 10 y 9: cuatro ejecuciones de la prueba. Identificó correctamente el commit 9 como el primero defectuoso. Finalmente, se ejecutó `git bisect reset` y se regresó a `main`, con el repositorio limpio.
