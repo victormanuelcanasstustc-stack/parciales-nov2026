@@ -1,0 +1,7 @@
+moneda_base,moneda_destino,tasa
+USD,EUR,0.92
+USD,COP,4200.00
+EUR,USD,1.09
+EUR,COP,4565.00
+COP,USD,0.000238
+COP,EUR,0.000219

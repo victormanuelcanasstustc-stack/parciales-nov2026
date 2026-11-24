@@ -1,0 +1,11 @@
+===================================
+       CONVERSOR DE DIVISAS
+===================================
+Ingrese el monto que desea convertir: Moneda de origen (USD, EUR, COP): Moneda de destino (USD, EUR, COP): Se utilizarán las tasas locales de respaldo.
+-----------------------------------
+RESUMEN DE LA CONVERSIÓN
+Monto original: 100.00 USD
+Tasa aplicada: 0.92
+Resultado: 92.00 EUR
+-----------------------------------
+Gracias por utilizar el conversor.

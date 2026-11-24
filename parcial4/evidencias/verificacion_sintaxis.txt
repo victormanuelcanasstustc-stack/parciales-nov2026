@@ -1,0 +1,2 @@
+Verificacion de sintaxis Python
+Resultado: sintaxis correcta.

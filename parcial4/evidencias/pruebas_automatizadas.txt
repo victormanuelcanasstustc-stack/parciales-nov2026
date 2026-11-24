@@ -1,0 +1,15 @@
+test_api_no_disponible_devuelve_none (test_converter.TestConversor.test_api_no_disponible_devuelve_none) ... ok
+test_cargar_tasas_desde_csv (test_converter.TestConversor.test_cargar_tasas_desde_csv) ... ok
+test_consultar_api_con_respuesta_simulada (test_converter.TestConversor.test_consultar_api_con_respuesta_simulada) ... ok
+test_convertir_a_la_misma_moneda (test_converter.TestConversor.test_convertir_a_la_misma_moneda) ... ok
+test_convertir_usd_a_eur (test_converter.TestConversor.test_convertir_usd_a_eur) ... ok
+test_formatear_monto (test_converter.TestConversor.test_formatear_monto) ... ok
+test_parsear_monto_texto_invalido (test_converter.TestConversor.test_parsear_monto_texto_invalido) ... ok
+test_rechazar_moneda_sin_tasa (test_converter.TestConversor.test_rechazar_moneda_sin_tasa) ... ok
+test_rechazar_monto_negativo (test_converter.TestConversor.test_rechazar_monto_negativo) ... ok
+test_validar_monto_positivo (test_converter.TestConversor.test_validar_monto_positivo) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.007s
+
+OK
